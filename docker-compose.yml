@@ -1,0 +1,51 @@
+services:
+  upstream:
+    build: ./upstream
+    cap_add: [NET_ADMIN] # tc netem, somente neste container
+    volumes:
+      - ca:/ca
+      - tls:/tls
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8081/health]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  envoy:
+    image: envoyproxy/envoy:v1.38.3
+    command: [envoy, -c, /etc/envoy/envoy.yaml, --concurrency, "1", --log-level, warn]
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ca:/ca:ro
+    ports:
+      - "127.0.0.1:9901:9901"
+    depends_on:
+      upstream:
+        condition: service_healthy
+
+  php:
+    build: ./php
+    volumes:
+      - ca:/ca:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      upstream:
+        condition: service_healthy
+      envoy:
+        condition: service_started
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1/health]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  benchmark:
+    build: ./benchmark
+    profiles: [tools]
+    volumes:
+      - ./benchmark/results:/results
+
+volumes:
+  ca:
+  tls:
