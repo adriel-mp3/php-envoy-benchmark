@@ -1,0 +1,438 @@
+{
+  "date": "2026-09-23",
+  "description": "Apurado das execuções locais disponíveis. Cópias integrais dos summary.json selecionados, acrescidas do id da execução.",
+  "selection": {
+    "valid": true,
+    "requests_planned": 1000,
+    "concurrency": 8,
+    "netem_ms": [
+      0,
+      10,
+      30,
+      50
+    ]
+  },
+  "aggregation": "Mediana de cada métrica entre execuções do mesmo cenário e atraso. Percentis não são recalculados sobre requests agrupados.",
+  "environment_observed_at_analysis": {
+    "cpu": "AMD Ryzen 5 5600G with Radeon Graphics",
+    "physical_cores": 6,
+    "logical_cpus": 12,
+    "docker_memory_bytes": 16547999744,
+    "os": "Linux Mint 22.3",
+    "kernel": "6.17.0-23-generic",
+    "docker": "29.4.3",
+    "compose": "5.1.3",
+    "php": "8.4.25",
+    "apache": "2.4.68",
+    "envoy": "1.38.3",
+    "hey": "0.1.4",
+    "upstream_build_image": "golang:1.26-alpine",
+    "php_workers": 16,
+    "envoy_workers": 1,
+    "note": "Ambiente consultado na apuração; o runner não captura um inventário por execução nem uso de CPU/memória."
+  },
+  "excluded_runs": [
+    {
+      "id": "20260923T221533.850978Z-envoy-0ms",
+      "reason": "Parâmetros diferentes: 100 requests, concorrência 1."
+    }
+  ],
+  "runs": [
+    {
+      "id": "20260923T221208.854670Z-direct-0ms",
+      "mode": "direct",
+      "netem_ms": 0,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 0.469,
+      "requests_per_second": 2131.195,
+      "mean_ms": 3.7,
+      "p50_ms": 3.6,
+      "p95_ms": 4.6,
+      "p99_ms": 5.7,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T221225.935640Z-envoy-0ms",
+      "mode": "envoy",
+      "netem_ms": 0,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 0.203,
+      "requests_per_second": 4934.955,
+      "mean_ms": 1.6,
+      "p50_ms": 1.6,
+      "p95_ms": 1.9,
+      "p99_ms": 2.6,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 993
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    },
+    {
+      "id": "20260923T221228.145696Z-direct-10ms",
+      "mode": "direct",
+      "netem_ms": 10,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 4.177,
+      "requests_per_second": 239.39,
+      "mean_ms": 33.4,
+      "p50_ms": 33.3,
+      "p95_ms": 34.4,
+      "p99_ms": 35.3,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T221234.434070Z-envoy-10ms",
+      "mode": "envoy",
+      "netem_ms": 10,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 1.56,
+      "requests_per_second": 641.131,
+      "mean_ms": 12.5,
+      "p50_ms": 12.1,
+      "p95_ms": 12.4,
+      "p99_ms": 12.7,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 992
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    },
+    {
+      "id": "20260923T221238.147905Z-direct-30ms",
+      "mode": "direct",
+      "netem_ms": 30,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 11.716,
+      "requests_per_second": 85.354,
+      "mean_ms": 93.7,
+      "p50_ms": 93.7,
+      "p95_ms": 94.6,
+      "p99_ms": 95.3,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T221252.098222Z-envoy-30ms",
+      "mode": "envoy",
+      "netem_ms": 30,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 4.163,
+      "requests_per_second": 240.192,
+      "mean_ms": 33.3,
+      "p50_ms": 32.3,
+      "p95_ms": 32.5,
+      "p99_ms": 32.7,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 992
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    },
+    {
+      "id": "20260923T221258.645852Z-direct-50ms",
+      "mode": "direct",
+      "netem_ms": 50,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 19.224,
+      "requests_per_second": 52.019,
+      "mean_ms": 153.8,
+      "p50_ms": 153.7,
+      "p95_ms": 154.7,
+      "p99_ms": 155.3,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T221320.319383Z-envoy-50ms",
+      "mode": "envoy",
+      "netem_ms": 50,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 6.745,
+      "requests_per_second": 148.246,
+      "mean_ms": 54.0,
+      "p50_ms": 52.3,
+      "p95_ms": 52.5,
+      "p99_ms": 53.0,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 992
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    },
+    {
+      "id": "20260923T222204.587989Z-direct-0ms",
+      "mode": "direct",
+      "netem_ms": 0,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 0.455,
+      "requests_per_second": 2197.683,
+      "mean_ms": 3.6,
+      "p50_ms": 3.5,
+      "p95_ms": 4.4,
+      "p99_ms": 4.7,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T222221.596621Z-envoy-0ms",
+      "mode": "envoy",
+      "netem_ms": 0,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 0.207,
+      "requests_per_second": 4820.044,
+      "mean_ms": 1.7,
+      "p50_ms": 1.6,
+      "p95_ms": 1.9,
+      "p99_ms": 3.0,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 992
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    },
+    {
+      "id": "20260923T222407.405020Z-direct-30ms",
+      "mode": "direct",
+      "netem_ms": 30,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 11.688,
+      "requests_per_second": 85.562,
+      "mean_ms": 93.5,
+      "p50_ms": 93.4,
+      "p95_ms": 94.5,
+      "p99_ms": 96.0,
+      "upstream_delta": {
+        "connections_total": 1000,
+        "requests_total": 1000,
+        "requests_reused": 0
+      },
+      "upstream_connections_active_after": 0,
+      "envoy_delta": {
+        "upstream_cx_total": 0,
+        "upstream_rq_total": 0,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 0,
+      "valid": true
+    },
+    {
+      "id": "20260923T222504.193806Z-envoy-30ms",
+      "mode": "envoy",
+      "netem_ms": 30,
+      "concurrency": 8,
+      "requests_planned": 1000,
+      "http_responses": 1000,
+      "http_200": 1000,
+      "transport_errors": 0,
+      "http_status_codes": {
+        "200": 1000
+      },
+      "duration_s": 4.126,
+      "requests_per_second": 242.382,
+      "mean_ms": 33.0,
+      "p50_ms": 32.0,
+      "p95_ms": 32.4,
+      "p99_ms": 33.7,
+      "upstream_delta": {
+        "connections_total": 8,
+        "requests_total": 1000,
+        "requests_reused": 992
+      },
+      "upstream_connections_active_after": 8,
+      "envoy_delta": {
+        "upstream_cx_total": 8,
+        "upstream_rq_total": 1000,
+        "upstream_cx_connect_fail": 0,
+        "upstream_rq_5xx": 0
+      },
+      "envoy_connections_active_after": 8,
+      "valid": true
+    }
+  ]
+}

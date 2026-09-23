@@ -1,50 +1,184 @@
-# PHP → HTTPS, com e sem pooling do Envoy
+# PHP + Envoy: connection pooling benchmark
 
-Em quais condições reutilizar conexões HTTPS compensa o custo de passar por um
-proxy? Este experimento compara uma aplicação PHP que cria um cliente cURL por
-request com a mesma aplicação usando o pool de conexões do Envoy. Os resultados
-dependem da latência, concorrência, CPU e comportamento do cliente; não há um
-vencedor presumido.
+Comparação entre chamadas HTTPS feitas diretamente pelo PHP e chamadas encaminhadas
+pelo Envoy, que reutiliza conexões com o upstream. Docker Compose, cURL, HTTP/1.1
+e `tc netem`, sem framework ou infraestrutura de observabilidade adicional.
 
-## Arquitetura
+**Pergunta do experimento:** em quais condições o custo de passar pelo proxy é
+compensado pela reutilização de conexões TCP/TLS?
+
+[Resultados](#resultados) · [Metodologia](#metodologia) · [Como executar](#como-executar) · [Métricas](#consultar-as-métricas)
+
+## Resultados
+
+Apurado de **23/09/2026**: **12 execuções comparáveis**, com **1.000 requests por
+execução** e **concorrência 8**. Todas passaram na validação: **12.000 respostas
+HTTP 200**, sem falhas de transporte ou de conexão reportadas pelo Envoy.
+
+Neste ambiente, o caminho via Envoy apresentou menor latência e maior throughput
+em todos os níveis de atraso testados, inclusive em 0 ms. Isso descreve esta
+amostra; ela não identifica uma condição em que o overhead do proxy supere o
+benefício do pooling.
+
+Os [dados usados no apurado](benchmark/baseline/2026-09-23.json) estão preservados
+no repositório, com o identificador e o resumo de cada execução.
+
+### Latência e throughput
+
+Cada célula representa a **mediana da métrica entre as execuções** daquele
+cenário. Há duas execuções por caminho em 0 e 30 ms, e apenas uma em 10 e 50 ms.
+As colunas p50/p95/p99 são medianas dos percentis de cada execução, **não percentis
+recalculados sobre o conjunto de requests**. Com duas amostras, a mediana é a
+média dos dois valores centrais.
+
+| Netem (ms) | Caminho | Execuções | Média (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Requests/s ↑ |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | Direto | 2 | 3,65 | 3,55 | 4,50 | 5,20 | 2.164,44 |
+| 0 | Envoy | 2 | 1,65 | 1,60 | 1,90 | 2,80 | 4.877,50 |
+| 10 | Direto | 1 | 33,40 | 33,30 | 34,40 | 35,30 | 239,39 |
+| 10 | Envoy | 1 | 12,50 | 12,10 | 12,40 | 12,70 | 641,13 |
+| 30 | Direto | 2 | 93,60 | 93,55 | 94,55 | 95,65 | 85,46 |
+| 30 | Envoy | 2 | 33,15 | 32,15 | 32,45 | 33,20 | 241,29 |
+| 50 | Direto | 1 | 153,80 | 153,70 | 154,70 | 155,30 | 52,02 |
+| 50 | Envoy | 1 | 54,00 | 52,30 | 52,50 | 53,00 | 148,25 |
+
+Nas colunas de latência, menor é melhor. `Netem` é o atraso adicional na saída
+do upstream, em uma única direção; 0 ms significa ausência de atraso artificial,
+não ausência de latência de rede. As casas decimais da agregação não aumentam a
+resolução original do relatório do hey, de 0,1 ms.
+
+### Diferença entre os caminhos
+
+| Netem (ms) | Throughput Envoy / direto | Redução da latência média |
+| ---: | ---: | ---: |
+| 0 | 2,25× | 54,8% |
+| 10 | 2,68× | 62,6% |
+| 30 | 2,82× | 64,6% |
+| 50 | 2,85× | 64,9% |
+
+Razão de throughput = `requests/s Envoy ÷ requests/s direto`.
+Redução de latência = `1 − média Envoy ÷ média direto`.
+Os cálculos usam as medianas antes do arredondamento da tabela.
+
+### Conexões e reutilização
+
+Totais das seis execuções de cada caminho, somando os quatro níveis de atraso:
+
+| Métrica | Direto | Envoy |
+| --- | ---: | ---: |
+| Requests recebidos no upstream | 6.000 | 6.000 |
+| Conexões TCP abertas com o upstream | 6.000 | 48 |
+| Novas conexões por lote de 1.000 requests | 1.000 | 8 |
+| Requests atendidos em conexão já usada | 0 | 5.953 |
+| Percentual de requests reutilizando conexão | 0% | 99,22% |
+| Conexões ainda abertas após cada lote | 0 | 8 |
+
+Foram **99,2% menos conexões novas** no caminho via Envoy. O número de conexões
+abertas por lote permaneceu em oito nos quatro níveis de atraso medidos.
+
+A reutilização é contada por socket no upstream. Uma conexão que atende dez
+requests contribui com nove reutilizações. Na primeira execução Envoy de 0 ms,
+houve oito conexões abertas e 993 requests reutilizados: sete conexões atenderam
+requests e uma não foi usada durante a medição. Por isso, subtrair conexões de
+requests daria uma estimativa diferente da contagem observada.
+
+### Leitura dos dados
+
+- **O custo do atraso cresceu mais no caminho direto.** De 0 para 50 ms de netem,
+  a latência média agregada passou de 3,65 para 153,80 ms no direto e de 1,65 para
+  54,00 ms via Envoy. O comportamento é compatível com o custo de repetir as
+  trocas de TCP/TLS a cada chamada, enquanto sockets reutilizados continuam
+  pagando o custo da requisição e da resposta.
+- **O pooling também apareceu nos contadores.** A redução de conexões de 1.000
+  para oito por lote acompanha a diferença de desempenho. Isso sustenta a
+  interpretação de reutilização, mas não separa seu efeito do restante do proxy.
+- **O direto não venceu em 0 ms nesta amostra.** Em outro ambiente isso pode
+  acontecer: quando estabelecer conexões locais é barato, o salto extra, o
+  processamento HTTP e o agendamento do proxy podem dominar a comparação.
+
+## Metodologia
 
 ```text
-                            ┌─ /direct ── HTTPS ──────────────────┐
-hey ── HTTP ──> PHP/Apache ──┤                                     ├──> upstream /work
-                            └─ /envoy ─── HTTP ──> Envoy ── HTTPS ─┘
-                                                   pool HTTP/1.1
+DIRETO
+hey ── HTTP ──> PHP /direct ── HTTPS ──> upstream /work
+
+COM ENVOY
+hey ── HTTP ──> PHP /envoy ── HTTP ──> Envoy ══ HTTPS reutilizado ══> upstream /work
 ```
 
-- **PHP 8.4 + Apache:** 16 workers fixos, sem framework. Cada endpoint faz uma
-  chamada e devolve o mesmo JSON. Cada request cria e destrói seu próprio handle
-  cURL, sem compartilhamento de conexões entre requests PHP. Não enviamos
-  `Connection: close` ao upstream: ele aceita keep-alive em ambos os caminhos.
-- **Upstream Go:** somente biblioteca padrão; HTTPS em `8443`, resposta pequena e
-  constante, sem banco ou espera na aplicação. Conta conexões TCP aceitas e,
-  por conexão, quantas requisições já foram atendidas. Saúde e contadores ficam
-  em outra porta (`8081`), fora dessas contagens.
-- **Envoy:** um worker, cluster `api`, keep-alive e pool padrão; sem retries
-  configurados, cache ou limite de uma requisição por conexão. O pool pode abrir
-  várias conexões conforme a concorrência.
-- **hey:** executado em um container temporário, na mesma rede do Compose.
-  O trecho hey → PHP usa keep-alive nos dois testes.
+| Parâmetro | Configuração |
+| --- | --- |
+| Carga | hey 0.1.4; lote fixo de 1.000 requests; oito workers do gerador |
+| PHP | Apache com 16 workers; um handle cURL novo por request |
+| Envoy | Um worker; pool HTTP/1.1 padrão; sem retries configurados ou cache |
+| Upstream | Go, biblioteca padrão; JSON constante de 12 bytes; sem banco ou espera artificial na aplicação |
+| Protocolo | HTTP/1.1 em ambos os caminhos; sem multiplexação HTTP/2 |
+| TLS | Certificado e nome `upstream` validados por PHP e Envoy usando uma CA local |
+| Aquecimento | Nenhum; Envoy reiniciado antes de cada lote, com pool vazio |
+| Rede | Containers na mesma rede bridge do Compose; netem apenas na saída do upstream |
+| Medição | Latência vista pelo hey, incluindo PHP, filas, rede e upstream |
 
-HTTP/1.1 é usado nos dois caminhos, inclusive até o upstream, para observar
-pooling sem introduzir multiplexação HTTP/2. PHP e Envoy validam o certificado
-e o nome `upstream` usando uma CA local criada automaticamente. Somente o
-certificado público da CA é compartilhado; as chaves ficam em um volume do
-upstream. Nada usa `-k` ou desabilita a verificação TLS.
+O PHP destrói o handle cURL ao concluir cada request. Assim, o caminho direto
+não mantém um pool persistente entre requests PHP. O upstream aceita keep-alive
+nos dois caminhos; a aplicação não força `Connection: close`. No caminho via
+Envoy, a conexão PHP → proxy também é nova a cada request, mas o pool do proxy
+mantém as conexões com o upstream. O trecho hey → PHP usa keep-alive nos dois testes.
 
-## Executar
+Cada medição usa diferenças entre contadores coletados antes e depois do hey.
+Healthchecks e coleta de stats usam uma porta separada e não contam como requests
+da API. O pool HTTP/1.1 pode abrir várias conexões conforme a concorrência;
+reutilização não significa atender todo o lote em um único socket.
 
-Requisitos: Docker com uma versão atual do Compose (v2 ou posterior) e Bash. Não é necessário instalar
-PHP, Go, Python ou hey no host. O primeiro build precisa de acesso à internet.
-Use containers Linux; `tc netem` depende do kernel do host/VM do Docker.
+O apurado inclui todos os resumos válidos disponíveis na data com 1.000 requests
+e concorrência 8. A execução de validação com 100 requests e concorrência 1 foi
+excluída por ter parâmetros diferentes. Uma execução interrompida não produziu
+resumo e também não entra no conjunto. A ordem registrada foi direto → Envoy em
+cada par; as repetições extras cobrem apenas 0 e 30 ms.
+
+### Ambiente
+
+| Componente | Ambiente observado na apuração |
+| --- | --- |
+| CPU | AMD Ryzen 5 5600G, seis núcleos / 12 threads |
+| Memória disponível ao Docker | 15,41 GiB |
+| Sistema | Linux Mint 22.3, kernel 6.17.0-23-generic, x86_64 |
+| Docker / Compose | 29.4.3 / 5.1.3 |
+| PHP / Apache | 8.4.25 / 2.4.68 |
+| Envoy | 1.38.3 |
+| Upstream | Build com `golang:1.26-alpine` |
+| Limites de recursos | Sem quotas de CPU/memória configuradas no Compose |
+
+Esse inventário foi consultado na mesma máquina durante a apuração. O runner
+não registra hardware, utilização de recursos ou versões efetivas por execução.
+
+### Limitações
+
+São uma ou duas execuções por combinação, sem intervalo de confiança e sem
+alternância da ordem. Os lotes de 0 ms duraram menos de meio segundo, tornando-os
+particularmente sensíveis a ruído. Os valores são descritivos desta amostra,
+não uma estimativa robusta de capacidade máxima ou de desempenho em produção.
+
+O teste compara **PHP sem pool persistente na aplicação** com **PHP + pool do
+Envoy**. Clientes que reutilizam handles, runtimes persistentes, HTTP/2, retomada
+de sessões TLS e payloads maiores podem produzir outros resultados. O segundo
+caminho também acrescenta um proxy e muda a implementação TLS; o experimento
+não isola exclusivamente o efeito do pooling.
+
+Todos os containers compartilham CPU e rede. Não foram medidos CPU, memória,
+perda de pacotes ou o RTT real. O netem modela atraso assimétrico, sem perda,
+jitter ou banda configurados. Para uma comparação mais forte, repita os pares
+alternando a ordem e explore concorrências e tamanhos de lote diferentes.
+
+## Como executar
+
+Requisitos: Docker com Compose atual (v2 ou posterior), Bash e containers Linux.
+O primeiro build precisa de internet. PHP, Go, Python e hey rodam nos containers.
 
 ```sh
 docker compose up -d
 docker compose ps
 
+# Aguarde o PHP ficar healthy antes de testar manualmente
 curl http://localhost:8080/direct
 curl http://localhost:8080/envoy
 
@@ -55,108 +189,80 @@ curl http://localhost:8080/envoy
 ./benchmark/run.sh envoy 30
 ```
 
-Na primeira subida, aguarde o PHP ficar `healthy` em `docker compose ps`.
-O script espera a prontidão antes da medição e constrói automaticamente a imagem
-do benchmark na primeira execução.
-
-Por padrão são **1.000 requests, concorrência 8**, sem aquecimento. Cada execução
-reinicia o Envoy e começa com pool vazio, incluindo o custo das primeiras
-conexões na medição. O script captura contadores antes/depois: chamadas manuais
-anteriores não entram nos deltas. Execute um teste por vez, sem tráfego manual
-durante a medição; um lock impede dois `run.sh` simultâneos neste diretório.
+O script constrói o container do benchmark, espera os serviços, aplica netem,
+reinicia o Envoy, executa hey e imprime o resumo. Execute um teste por vez, sem
+tráfego manual durante a medição. Um lock impede dois scripts simultâneos.
 
 ```sh
-# Mesmos parâmetros nos dois cenários
-REQUESTS=4000 CONCURRENCY=8 ./benchmark/run.sh direct 30
-REQUESTS=4000 CONCURRENCY=8 ./benchmark/run.sh envoy 30
-
-# Matriz de latência
+# Reproduzir a matriz básica: um lote por combinação
 for ms in 0 10 30 50; do
   ./benchmark/run.sh direct "$ms"
   ./benchmark/run.sh envoy "$ms"
 done
+
+# Alterar a carga mantendo parâmetros iguais nos dois caminhos
+REQUESTS=4000 CONCURRENCY=8 ./benchmark/run.sh direct 30
+REQUESTS=4000 CONCURRENCY=8 ./benchmark/run.sh envoy 30
 ```
 
-Repita a matriz algumas vezes, alternando a ordem dos cenários. Mantenha iguais
-o número de requests e a concorrência; comece abaixo dos 16 workers do PHP.
-Acima disso, filas no Apache também entram na latência. O Envoy usa apenas um
-worker para deixar o pool fácil de observar, o que também pode limitar throughput.
+A matriz acima gera oito execuções; o apurado publicado também inclui uma
+repetição de cada caminho em 0 e 30 ms. `REQUESTS` deve estar entre 100 e
+1.000.000 e ser múltiplo de `CONCURRENCY`, evitando limitações de distribuição
+e amostragem do hey. Comece abaixo dos 16 workers do PHP; acima disso, filas
+no Apache também entram na latência.
 
-`REQUESTS` deve estar entre 100 e 1.000.000 e ser múltiplo de `CONCURRENCY`.
-Essas restrições evitam percentis ausentes em amostras minúsculas, truncamento
-da divisão de requests entre workers e o limite de amostras do hey 0.1.4.
+### Arquivos de saída
 
-## Resumo e métricas
+Cada execução grava `benchmark/results/<data>-<cenário>-<ms>ms/`:
 
-O script imprime os mesmos campos para os dois cenários:
-
-| Campo | O que observar |
+| Arquivo | Conteúdo |
 | --- | --- |
-| Latência média, p50, p95, p99 (ms) | Tempo visto pelo hey: inclui PHP, filas, rede e upstream |
-| Requests por segundo e duração | Throughput e tempo do lote completo |
-| Requests planejados, respostas HTTP, HTTP 200, erros | Confirma se o lote foi concluído com sucesso |
-| Requests recebidos no upstream (delta) | Total que chegou a `/work` durante o teste |
-| Conexões TCP abertas (delta) | Novas conexões aceitas na porta HTTPS durante o lote |
-| Conexões ainda abertas | Gauge após o teste; inclui conexões ociosas no pool |
-| Requests em conexão já usada (delta e %) | Contagem exata de requests cujo socket já atendeu outro request |
-| Envoy: conexões e requests (delta) | Contadores do cluster `api`; devem ficar em zero no teste direto |
+| `hey.txt` | Relatório original, histograma, status HTTP e erros |
+| `snapshots.json` | Contadores do upstream e do Envoy antes/depois |
+| `summary.json` | Parâmetros, latências, throughput, contagens e validação |
 
-Uma conexão que atende 10 requests contribui com 1 conexão e 9 requests
-reutilizando conexão. Uma conexão aceita pode ficar ociosa sem uso ou falhar antes de atender um request;
-por isso **requests menos conexões não é uma medida exata de reutilização**.
-O upstream mede reutilização diretamente e conta apenas sockets HTTPS, incluindo
-os que ainda estão em handshake. A gauge de conexões abertas pode incluir sockets
-em processo de fechamento no instante da coleta.
+Novas execuções ficam fora do Git e não alteram o apurado publicado em
+[`benchmark/baseline/2026-09-23.json`](benchmark/baseline/2026-09-23.json).
+Esse arquivo preserva os resumos originais selecionados, acrescidos dos IDs;
+não contém tempos individuais de cada request.
 
-Os arquivos de cada execução ficam em `benchmark/results/<data>-<cenário>-<ms>ms/`:
+O script falha se houver HTTP diferente de 200, erros de transporte, contagens
+inconsistentes ou métricas ausentes. Compare execuções com **Validação OK**:
+o throughput do hey inclui tentativas com erro, enquanto seus percentis incluem
+respostas HTTP recebidas, mesmo HTTP 502, e excluem falhas de transporte.
 
-- `hey.txt`: relatório completo original, incluindo histograma e erros.
-- `snapshots.json`: contadores antes/depois, sem resetar o upstream.
-- `summary.json`: resumo comparável, parâmetros e resultado da validação.
-
-O script termina com erro se houver respostas diferentes de HTTP 200, falhas de
-transporte, contagens inconsistentes ou percentis ausentes. Percentis do hey
-consideram respostas HTTP recebidas, inclusive HTTP 502, mas não falhas de
-transporte; requests/s inclui tentativas que falharam. Compare desempenho apenas
-entre execuções com **Validação OK**. A impressão em milissegundos herda o
-arredondamento de quatro casas decimais em segundos do relatório do hey.
-
-## Latência artificial com tc netem
+## Latência artificial
 
 O segundo argumento aplica `tc qdisc replace dev eth0 root netem delay <N>ms`
-**na saída do container upstream**. Tanto PHP direto quanto Envoy recebem o mesmo
-atraso nos pacotes vindos do upstream: SYN-ACK, handshake TLS e respostas HTTP.
-O trecho PHP → Envoy não recebe netem. Não é um `sleep` na API.
+na saída do upstream. Tanto PHP direto quanto Envoy recebem o mesmo atraso nos
+pacotes vindos dele, incluindo SYN-ACK, handshake TLS e respostas HTTP.
+PHP → Envoy não recebe netem.
 
-`30` significa **30 ms adicionais em uma direção**, aproximadamente +30 ms de
-RTT em relação à rede local, não 30 ms em cada direção. Handshakes envolvem
-múltiplas trocas e podem pagar esse atraso mais de uma vez. A modelagem é
-assimétrica e não inclui perda, jitter ou limite de banda. Toda saída `eth0` do
-upstream é afetada, incluindo a coleta de stats, feita fora do intervalo do hey.
+`30` significa 30 ms adicionais em uma direção, aproximadamente +30 ms de RTT
+sobre a rede local. Handshakes envolvem múltiplas trocas e podem pagar o atraso
+mais de uma vez. A coleta de stats também passa por essa interface, mas ocorre
+fora do intervalo medido pelo hey.
 
 O script define o atraso em toda execução, inclusive `0`, e remove a regra ao
-terminar ou receber Ctrl+C. Só o upstream recebe a capability `NET_ADMIN`;
-nenhum container usa `privileged`.
+terminar ou receber Ctrl+C. Apenas o upstream recebe `NET_ADMIN`; nenhum
+container usa `privileged`.
 
 ```sh
-# Inspecionar a regra e eventuais drops durante um teste
+# Inspecionar a regra e possíveis drops durante um teste
 docker compose exec upstream tc -s qdisc show dev eth0
 
-# Recuperação manual, se o script tiver sido morto com SIGKILL ou o host cair
+# Recuperação após SIGKILL/queda do host; confirme que não há teste rodando
 docker compose exec upstream tc qdisc del dev eth0 root
-# Só remova o lock depois de confirmar que nenhum teste está rodando:
 rmdir benchmark/results/.lock
 ```
 
-Se aparecer `Operation not permitted`, confira se `NET_ADMIN` é permitido pelo
-Docker (ambientes rootless/restritos podem impedi-lo). Se aparecer
-`Specified qdisc kind is unknown`, falta `sch_netem` no kernel do host/VM.
-Em um host Linux compatível, pode ser necessário `sudo modprobe sch_netem`.
-No Docker Desktop, o módulo precisa estar disponível na VM Linux.
-O script falha explicitamente se não conseguir aplicar o atraso, inclusive no
-teste de 0 ms; não continua alegando uma latência que não foi aplicada.
+`Operation not permitted` indica que é preciso conferir a permissão `NET_ADMIN`.
+`Specified qdisc kind is unknown` indica ausência de `sch_netem` no kernel do
+host/VM; em Linux, pode ser necessário `sudo modprobe sch_netem`. No Docker
+Desktop, o suporte precisa existir na VM Linux. O script falha se não conseguir
+aplicar netem, inclusive no teste de 0 ms.
 
-## Consultar o Envoy e o upstream
+## Consultar as métricas
 
 O admin do Envoy é publicado somente em `127.0.0.1:9901`:
 
@@ -166,49 +272,35 @@ curl 'http://localhost:9901/stats?filter=cluster.api.upstream_cx'
 curl 'http://localhost:9901/stats?filter=cluster.api.upstream_rq'
 curl 'http://localhost:9901/stats?filter=cluster.api.ssl'
 
-# Contadores exatos, comuns aos dois caminhos
+# Contadores comuns aos dois caminhos
 docker compose exec upstream wget -qO- http://127.0.0.1:8081/stats
 ```
 
-Observe `cluster.api.upstream_cx_total` (conexões criadas), `upstream_cx_active`
-(abertas agora), `upstream_rq_total` (requests) e `upstream_cx_connect_fail`
-(falhas de conexão). `cluster.api.ssl.handshake` ajuda a observar handshakes TLS.
-Os contadores do Envoy são cumulativos desde a inicialização; o script reinicia
-o processo entre testes. A reutilização exata vem de `requests_reused` no
-upstream, pois esses contadores do Envoy não equivalem a um contador de reuse.
+| Métrica | Significado |
+| --- | --- |
+| Envoy `cluster.api.upstream_cx_total` | Conexões criadas com o upstream |
+| Envoy `cluster.api.upstream_cx_active` | Conexões abertas agora, inclusive ociosas |
+| Envoy `cluster.api.upstream_rq_total` | Requests encaminhados ao upstream |
+| Envoy `cluster.api.upstream_cx_connect_fail` | Falhas de conexão |
+| Envoy `cluster.api.ssl.handshake` | Handshakes TLS |
+| Upstream `connections_total` / `connections_active` | Conexões TCP aceitas na porta HTTPS / ainda abertas |
+| Upstream `requests_total` / `requests_reused` | Requests em `/work` / atendidos em socket já usado |
 
-## Interpretar sem antecipar a conclusão
+Os contadores são cumulativos desde a inicialização de cada processo. O resumo
+usa deltas para os totais e o valor final para conexões abertas. No teste direto,
+os deltas do cluster Envoy devem ficar em zero. Conexões ainda em handshake ou
+em processo de fechamento podem aparecer na gauge do upstream.
 
-Sem atraso artificial, estabelecer TCP/TLS na rede local pode ser barato o
-suficiente para que a chamada direta vença: o proxy acrescenta um salto,
-processamento HTTP e agendamento. Reutilizar sockets, por si só, não garante
-latência menor ou mais requests/s.
-
-Conforme cresce o custo das trocas de rede, evitar novos estabelecimentos de
-TCP/TLS pode compensar esse overhead. A conexão reaproveitada ainda paga o custo
-da requisição e da resposta. O pool HTTP/1.1 atende um request por conexão por
-vez, portanto concorrência maior pode exigir mais conexões.
-
-Este teste compara **PHP sem pool persistente na aplicação** com **PHP + pool do
-Envoy**. Não representa todo cliente PHP: processos longos que reutilizam um
-handle cURL, clientes com pooling e runtimes persistentes podem ter outro
-resultado. Também não isola exclusivamente pooling: o segundo caminho adiciona
-o proxy e usa outra implementação TLS. HTTP/2, TLS session resumption entre
-clientes persistentes, payloads grandes e trabalho real na API mudam o cenário.
-
-Todos os containers competem pela CPU e rede da mesma máquina/VM. CPU saturada,
-outros processos, limites de workers, filas, drops no netem e lotes curtos podem
-dominar os resultados. Relacione percentis e throughput com erros, conexões e
-reutilização; repita antes de atribuir uma diferença ao pooling.
-
-## Encerrar e referências
+## Encerrar
 
 ```sh
 docker compose down
-# Para também apagar a CA e as chaves locais:
+# Também apagar a CA e as chaves locais:
 docker compose down -v
 ```
 
-Detalhes nas fontes: [pooling do Envoy](https://www.envoyproxy.io/docs/envoy/v1.38.3/intro/arch_overview/upstream/connection_pooling),
-[estatísticas do cluster](https://www.envoyproxy.io/docs/envoy/v1.38.3/configuration/upstream/cluster_manager/cluster_stats)
-e [hey](https://github.com/rakyll/hey).
+## Referências
+
+- [Connection pooling no Envoy](https://www.envoyproxy.io/docs/envoy/v1.38.3/intro/arch_overview/upstream/connection_pooling)
+- [Estatísticas do cluster Envoy](https://www.envoyproxy.io/docs/envoy/v1.38.3/configuration/upstream/cluster_manager/cluster_stats)
+- [hey — gerador de carga HTTP](https://github.com/rakyll/hey)
